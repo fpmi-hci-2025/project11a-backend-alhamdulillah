@@ -7,7 +7,7 @@ app = Flask(__name__)
 @app.route('/')
 def home():
     return jsonify({
-        'message': 'Hello World from Makhachkala! 🚀',
+        'message': 'Hello World from Makhachkala!',
         'status': 'OK',
         'timestamp': time.time(),
         'environment': os.getenv('ENVIRONMENT', 'development')
@@ -28,7 +28,7 @@ def health():
     return jsonify({
         'status': 'healthy',
         'service': 'makhachkala-backend',
-        'database': 'none',  # Простая версия без БД
+        'database': 'none',
         'timestamp': time.time()
     })
 

@@ -27,9 +27,9 @@ jobs:
     - name: Run simple Python test
       run: |
         # Проверяем, что приложение импортируется без ошибок
-        python -c "from app import app; print('✅ App imported successfully')"
+        python -c "from app import app; print('App imported successfully')"
         echo "Basic test passed!"
-
+        
   docker-build-test:
     needs: test
     runs-on: ubuntu-latest
@@ -44,19 +44,16 @@ jobs:
     
     - name: Test Docker container
       run: |
-        # Запускаем контейнер в фоновом режиме
         docker run -d --name test-container -p 8080:8000 makhachkala-hello:latest
         
-        # Ждем запуска приложения
         echo "Waiting for app to start..."
         sleep 5
         
-        # Проверяем health endpoint
         echo "Testing health endpoint..."
         HEALTH_RESPONSE=$(curl -s -f http://localhost:8080/api/health || echo "FAILED")
         
         if [[ "$HEALTH_RESPONSE" == "FAILED" ]]; then
-          echo "❌ Health check failed"
+          echo "Health check failed"
           docker logs test-container
           exit 1
         fi
@@ -64,16 +61,14 @@ jobs:
         echo "Health response:"
         echo "$HEALTH_RESPONSE" | python -m json.tool
         
-        # Проверяем основной endpoint
         echo "Testing main endpoint..."
         curl -s http://localhost:8080/ | python -m json.tool
         
-        # Останавливаем и удаляем контейнер
         echo "Cleaning up..."
         docker stop test-container
         docker rm test-container
         
-        echo "✅ All Docker tests passed!"
+        echo "All Docker tests passed!"
 
   deploy:
     needs: docker-build-test
