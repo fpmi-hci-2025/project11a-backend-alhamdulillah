@@ -1,0 +1,100 @@
+name: Simple CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master, development, production ]
+  pull_request:
+    branches: [ main, master, development, production ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run simple Python test
+      run: |
+        # Проверяем, что приложение импортируется без ошибок
+        python -c "from app import app; print('✅ App imported successfully')"
+        echo "Basic test passed!"
+
+  docker-build-test:
+    needs: test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Build Docker image
+      run: |
+        docker build -t makhachkala-hello:latest .
+    
+    - name: Test Docker container
+      run: |
+        # Запускаем контейнер в фоновом режиме
+        docker run -d --name test-container -p 8080:8000 makhachkala-hello:latest
+        
+        # Ждем запуска приложения
+        echo "Waiting for app to start..."
+        sleep 5
+        
+        # Проверяем health endpoint
+        echo "Testing health endpoint..."
+        HEALTH_RESPONSE=$(curl -s -f http://localhost:8080/api/health || echo "FAILED")
+        
+        if [[ "$HEALTH_RESPONSE" == "FAILED" ]]; then
+          echo "❌ Health check failed"
+          docker logs test-container
+          exit 1
+        fi
+        
+        echo "Health response:"
+        echo "$HEALTH_RESPONSE" | python -m json.tool
+        
+        # Проверяем основной endpoint
+        echo "Testing main endpoint..."
+        curl -s http://localhost:8080/ | python -m json.tool
+        
+        # Останавливаем и удаляем контейнер
+        echo "Cleaning up..."
+        docker stop test-container
+        docker rm test-container
+        
+        echo "✅ All Docker tests passed!"
+
+  deploy:
+    needs: docker-build-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    
+    steps:
+    - name: Login to DockerHub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    
+    - name: Deploy to Render
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+      env:
+        RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      run: |
+        echo "🚀 Triggering Render deployment..."
+        curl -X POST "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
+          -H "Authorization: Bearer $RENDER_API_KEY" \
+          -H "Content-Type: application/json" \
+          -d '{"clearCache": true}' || echo "Render deploy trigger might have failed, but continuing..."
